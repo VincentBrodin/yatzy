@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  dev:
+    desc: Run backend and frontend in dev mode
+    cmds:
+      - task backend:dev &
+      - task frontend:dev
+    silent: true
+
+  backend:dev:
+    dir: backend
+    cmds:
+      - air
+
+  frontend:dev:
+    dir: frontend
+    cmds:
+      - bun run dev
