@@ -8,38 +8,41 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+type Handler func(g *Game, p *Packet) error
+
 type Game struct {
-	Clients map[*Client]bool
-
-	Broadcast chan []byte
-
-	Register chan *Client
-
-	Unregister chan *Client
+	clients    map[*Client]bool
+	packets    chan *Packet
+	register   chan *Client
+	unregister chan *Client
+	handlers   map[uint32]Handler
 }
 
 func (g *Game) Start() {
 	for {
 		select {
-		case client := <-g.Register:
+		case client := <-g.register:
 			log.Println("Client connected")
-			g.Clients[client] = true
-		case client := <-g.Unregister:
-			if _, ok := g.Clients[client]; ok {
-				delete(g.Clients, client)
-				close(client.Buf)
+			g.clients[client] = true
+		case client := <-g.unregister:
+			if _, ok := g.clients[client]; ok {
+				log.Println("Client disconnected")
+				delete(g.clients, client)
+				close(client.packets)
 			}
-		case message := <-g.Broadcast:
-			for client := range g.Clients {
-				select {
-				case client.Buf <- message:
-				default:
-					close(client.Buf)
-					delete(g.Clients, client)
-				}
+		case packet := <-g.packets:
+			handler, ok := g.handlers[packet.CallId]
+			if ok {
+				go handler(g, packet)
+			} else {
+				log.Printf("No handler for %d\n", packet.CallId)
 			}
 		}
 	}
+}
+
+func (g *Game) Register(callId uint32, handler Handler) {
+	g.handlers[callId] = handler
 }
 
 func (g *Game) Serve(c echo.Context) error {
@@ -55,21 +58,22 @@ func (g *Game) Serve(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	client := &Client{g, conn, make(chan []byte, 256)}
-	client.Game.Register <- client
+	client := &Client{g, conn, make(chan *Packet, 256)}
+	client.Game.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
-	go client.Write()
-	go client.Read()
+	go client.write()
+	go client.read()
 	return nil
 }
 
 func NewGame() *Game {
 	return &Game{
 		make(map[*Client]bool),
-		make(chan []byte),
+		make(chan *Packet),
 		make(chan *Client),
 		make(chan *Client),
+		make(map[uint32]Handler),
 	}
 }

@@ -2,6 +2,7 @@ package ws
 
 import (
 	"bytes"
+	"encoding/binary"
 	"log"
 	"time"
 
@@ -16,67 +17,76 @@ const (
 )
 
 type Client struct {
-	Game *Game
-	Conn *websocket.Conn
-	Buf  chan []byte
+	Game    *Game
+	conn    *websocket.Conn
+	packets chan *Packet
 }
 
-func (c *Client) Read() {
+func (c *Client) Send(packet *Packet) {
+	c.packets <- packet
+}
+
+func (c *Client) read() {
 	defer func() {
-		c.Game.Unregister <- c
-		c.Conn.Close()
+		c.Game.unregister <- c
+		c.conn.Close()
 	}()
-	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.Conn.SetPongHandler(func(string) error { c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
-		_, message, err := c.Conn.ReadMessage()
+		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, []byte{'\n'}, []byte{' '}, -1))
-		c.Game.Broadcast <- message
+
+		var callId uint32
+		if err := binary.Read(bytes.NewReader(message[:4]), binary.BigEndian, &callId); err != nil {
+			log.Println(err)
+			continue
+		}
+
+		packet := &Packet{
+			CallId:  callId,
+			Client:  c,
+			Message: message[4:],
+		}
+
+		c.Game.packets <- packet
 	}
 }
 
-func (c *Client) Write() {
+func (c *Client) write() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.Conn.Close()
+		c.conn.Close()
 	}()
 	for {
 		select {
-		case message, ok := <-c.Buf:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+		case packet, ok := <-c.packets:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			w, err := c.Conn.NextWriter(websocket.TextMessage)
+			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
 			}
-			w.Write(message)
-
-			// Add queued chat messages to the current websocket message.
-			n := len(c.Buf)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Buf)
-			}
+			w.Write(packet.Build())
 
 			if err := w.Close(); err != nil {
 				return
 			}
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
