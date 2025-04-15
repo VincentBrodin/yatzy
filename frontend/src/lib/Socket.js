@@ -1,28 +1,49 @@
-import { writable } from 'svelte/store';
+const socket = new WebSocket('ws://localhost:3000/ws');
 
-const messageStore = writable('');
+const emitter = new EventTarget();
 
-const socket = new WebSocket('wss://localhost:3000/ws');
-
-// Connection opened
-socket.addEventListener('open', function (event) {
+socket.addEventListener('open', function(_) {
     console.log("It's open");
 });
 
-// Listen for messages
-socket.addEventListener('message', function (event) {
-    messageStore.set(event.data);
+
+socket.addEventListener('message', function(event) {
+    const data = event.data;
+
+    const encoder = new TextEncoder();
+    const buffer = encoder.encode(data).buffer;
+
+    const view = new DataView(buffer);
+    const callId = view.getUint32(0);
+
+    const payloadBuffer = buffer.slice(4);
+    const payloadView = new DataView(payloadBuffer);
+
+    const decoded = new CustomEvent('message', {
+        detail: { callId, message: payloadView }
+    });
+    emitter.dispatchEvent(decoded);
 });
 
-const sendMessage = (message) => {
-	if (socket.readyState <= 1) {
-		socket.send(message);
-	}
-}
+function Send(callId, message) {
+    if (socket.readyState <= 1) {
+        const encoder = new TextEncoder();
+        const msgBytes = encoder.encode(message);
+
+        const buffer = new ArrayBuffer(4 + msgBytes.length);
+        const view = new DataView(buffer);
+
+        view.setUint32(0, callId);
+
+        const payload = new Uint8Array(buffer);
+        payload.set(msgBytes, 4);
+
+        socket.send(payload);
+    }
+};
 
 
 export default {
-	subscribe: messageStore.subscribe,
-	sendMessage
+    Send: Send,
+    Emitter: emitter
 }
-
