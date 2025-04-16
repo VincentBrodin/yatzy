@@ -11,7 +11,7 @@
 		}
 	});
 
-	const preview = ref(1);
+	const preview = ref(props.die.value);
 	const rolling = ref(false);
 
 	function getRandomInt(max) {
@@ -50,7 +50,7 @@
 <template>
 	<div class="die-container">
 		<button @click="select">
-			<img class="w-full h-auto transition-opacity" :class="{ 'opacity-50': rolling || props.die.selected  }"
+			<img class="w-full h-auto transition" :class="{ 'rolling': rolling,  'selected': props.die.selected  }"
 				:src="`/img/${preview}.png`" alt="Dice Face">
 		</button>
 	</div>
@@ -60,5 +60,21 @@
 	.die-container {
 		max-width: 100%;
 		aspect-ratio: 1 / 1;
+	}
+
+	img {
+		border: 2px solid transparent;
+		border-radius: 8px;
+	}
+
+	.rolling {
+		opacity: 0.5;
+		scale: 1.05;
+	}
+
+	.selected {
+		opacity: 0.75;
+		scale: 0.75;
+		box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.5);
 	}
 </style>
