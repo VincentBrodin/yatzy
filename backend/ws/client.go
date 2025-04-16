@@ -3,9 +3,11 @@ package ws
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,6 +19,7 @@ const (
 )
 
 type Client struct {
+	Id      uuid.UUID
 	Game    *Game
 	conn    *websocket.Conn
 	packets chan *Packet
@@ -46,8 +49,11 @@ func (c *Client) read() {
 		var callId uint32
 		if err := binary.Read(bytes.NewReader(message[:4]), binary.BigEndian, &callId); err != nil {
 			log.Println(err)
+			panic(err)
 			continue
 		}
+
+		fmt.Println(message)
 
 		packet := &Packet{
 			CallId:  callId,

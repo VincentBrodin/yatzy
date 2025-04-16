@@ -1,9 +1,11 @@
 package ws
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 )
@@ -53,6 +55,21 @@ func (g *Game) Broadcast(packet *Packet) {
 	}
 }
 
+func (g *Game) BroadcastState(callId uint32) {
+	json, err := json.Marshal(g.State)
+	if err != nil {
+		log.Println(err)
+		panic(err)
+		return
+	}
+
+	g.Broadcast(&Packet{
+		CallId:  callId,
+		Client:  nil,
+		Message: json,
+	})
+}
+
 func (g *Game) Serve(c echo.Context) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -66,13 +83,22 @@ func (g *Game) Serve(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	client := &Client{g, conn, make(chan *Packet, 256)}
+	client := &Client{uuid.Max, g, conn, make(chan *Packet, 256)}
 	client.Game.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
 	go client.write()
 	go client.read()
+	json, err := json.Marshal(g.State)
+	if err != nil {
+		return err
+	}
+	client.Send(&Packet{
+		CallId:  1,
+		Client:  nil,
+		Message: json,
+	})
 	return nil
 }
 
