@@ -1,13 +1,18 @@
 <script setup>
 	import {ref} from 'vue';
+	import socket from '@/lib/socket';
+
+	const emit = defineEmits(["select"]);
 
 	const props = defineProps({
-		target: Number
+		die: {
+			type: Object,
+			required: true
+		}
 	});
 
 	const preview = ref(1);
 	const rolling = ref(false);
-	const selected = ref(false);
 
 	function getRandomInt(max) {
 		return Math.floor(Math.random() * max);
@@ -16,7 +21,7 @@
 
 	let rollInterval = null
 	function roll() {
-		if (selected.value) return
+		if (props.die.selected) return
 		rolling.value = true
 		if (rollInterval) clearInterval(rollInterval)
 
@@ -27,13 +32,17 @@
 		setTimeout(() => {
 			clearInterval(rollInterval)
 			rollInterval = null
-			preview.value = props.target
+			preview.value = props.die.value
 			rolling.value = false
 		}, 750)
 	}
 
 	function select() {
-		selected.value = !selected.value
+		console.log(`Selected ${props.die.index}`)
+		props.die.selected = !props.die.selected
+		const payload = {index: props.die.index, selected: props.die.selected};
+		socket.Send(2, JSON.stringify(payload));
+
 	}
 	defineExpose({roll})
 </script>
@@ -41,7 +50,7 @@
 <template>
 	<div class="die-container">
 		<button @click="select">
-			<img class="w-full h-auto transition-opacity" :class="{ 'opacity-50': rolling || selected  }"
+			<img class="w-full h-auto transition-opacity" :class="{ 'opacity-50': rolling || props.die.selected  }"
 				:src="`/img/${preview}.png`" alt="Dice Face">
 		</button>
 	</div>

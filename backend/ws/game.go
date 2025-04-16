@@ -11,6 +11,8 @@ import (
 type Handler func(g *Game, p *Packet) error
 
 type Game struct {
+	State *State
+
 	clients    map[*Client]bool
 	packets    chan *Packet
 	register   chan *Client
@@ -45,6 +47,12 @@ func (g *Game) Register(callId uint32, handler Handler) {
 	g.handlers[callId] = handler
 }
 
+func (g *Game) Broadcast(packet *Packet) {
+	for client := range g.clients {
+		client.Send(packet)
+	}
+}
+
 func (g *Game) Serve(c echo.Context) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -70,6 +78,7 @@ func (g *Game) Serve(c echo.Context) error {
 
 func NewGame() *Game {
 	return &Game{
+		NewState(),
 		make(map[*Client]bool),
 		make(chan *Packet),
 		make(chan *Client),

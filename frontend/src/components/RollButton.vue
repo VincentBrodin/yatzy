@@ -10,13 +10,8 @@
 		const callId = event.detail.callId;
 		if (callId !== 1) return;
 
-		const dice = [0, 0, 0, 0, 0]
-
-		for (let i = 0; i < event.detail.message.byteLength / 4; i++) {
-			dice[i] = Number(event.detail.message.getInt32(i * 4));
-		}
-
-		emit("roll", dice)
+		console.log(event.detail.message.dice)
+		emit("roll", event.detail.message.dice)
 
 		setTimeout(() => {
 			rolling.value = false;

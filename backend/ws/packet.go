@@ -9,7 +9,7 @@ import (
 type Packet struct {
 	CallId  uint32
 	Client  *Client
-	Message []byte
+	Message []byte 
 }
 
 func (p *Packet) Build() []byte {

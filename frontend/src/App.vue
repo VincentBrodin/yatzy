@@ -6,9 +6,15 @@
 
 	socket.Emitter.addEventListener("message", () => { })
 
-	const dice = ref([1, 1, 1, 1, 1])
-
+	const dice = ref(Array.from({length: 5}, (_, i) => ({index: i, value: 1, selected: false})));
 	const dieRefs = ref([])
+
+	socket.Emitter.addEventListener("message", (event) => {
+		const callId = event.detail.callId;
+		if (callId !== 2) return;
+		dice.value = event.detail.message.dice
+	});
+
 
 	function onRoll(newDice) {
 		console.log('New dice values:', newDice)
@@ -21,7 +27,7 @@
 
 <template>
 	<div class="w-full flex flex-row gap-8 justify-center p-8">
-		<Die v-for="(die, index) in dice" :key="index" :target="die" ref="dieRefs" />
+		<Die v-for="die in dice" :key="die.index" :die="die" ref="dieRefs" />
 	</div>
 	<RollButton @roll="onRoll" />
 </template>

@@ -1,8 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
+	"encoding/json"
 	"log"
 	"math/rand"
 
@@ -20,28 +19,56 @@ func main() {
 	}))
 
 	game := ws.NewGame()
-	game.Register(1, message)
+	game.Register(1, Roll)
+	game.Register(2, Select)
 	go game.Start()
 
 	e.GET("/ws", game.Serve)
 	e.Logger.Fatal(e.Start(":3000"))
 }
 
-func message(game *ws.Game, in *ws.Packet) error {
+func Roll(game *ws.Game, in *ws.Packet) error {
 	log.Printf("msg: %s\n", in.Message)
-	dice := make([]byte, 0) // 32bit int * 5
-	for range 5 {
-		buf := new(bytes.Buffer)
-		if err := binary.Write(buf, binary.BigEndian, uint32(rand.Intn(6)+1)); err != nil {
-			return err
+	for _, die := range game.State.Dice {
+		if !die.Selected {
+			die.Value = rand.Intn(6) + 1
 		}
-		dice = append(dice, buf.Bytes()...)
 	}
-	out := &ws.Packet{
+
+	json, err := json.Marshal(game.State)
+	if err != nil {
+		return err
+	}
+	game.Broadcast(&ws.Packet{
 		CallId:  1,
-		Client:  in.Client,
-		Message: dice,
+		Client:  nil,
+		Message: json,
+	})
+
+	return nil
+}
+
+func Select(game *ws.Game, in *ws.Packet) error {
+	log.Printf("msg: %s\n", in.Message)
+	newState := struct {
+		Index    int  `json:"index"`
+		Selected bool `json:"selected"`
+	}{}
+	if err := json.Unmarshal(in.Message, &newState); err != nil {
+		return err
 	}
-	in.Client.Send(out)
+
+	game.State.Dice[newState.Index].Selected = newState.Selected
+
+	json, err := json.Marshal(game.State)
+	if err != nil {
+		return err
+	}
+
+	game.Broadcast(&ws.Packet{
+		CallId:  2,
+		Client:  nil,
+		Message: json,
+	})
 	return nil
 }
